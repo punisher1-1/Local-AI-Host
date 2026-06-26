@@ -126,7 +126,7 @@ function ChatArea({ session, settings, onMessagesChange }) {
         <div className="messages-list">
           {visible.length === 0 && (
             <div className="empty-state">
-              <p>Ask a question about the MakerSpace knowledge base.</p>
+              <p>Ask a question about the LJA knowledge base.</p>
             </div>
           )}
           {visible.map((msg) => (

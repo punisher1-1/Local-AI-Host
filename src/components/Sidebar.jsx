@@ -36,7 +36,7 @@ function Sidebar({ sessions, onOpenSettings, currentChatId, onSelectChat, onNewC
 
       <div className="sidebar-footer" style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
         <a
-          href="mailto:feedback@example.com?subject=Local AI Trial Feedback"
+          href="mailto:feedback@example.com?subject=LJA Local AI — Feedback"
           className="settings-btn"
           style={{ textDecoration: 'none' }}
         >
