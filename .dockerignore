@@ -1,0 +1,12 @@
+# Keep the build context small and the image clean.
+node_modules
+dist
+dist-electron
+dist-electron-release
+.git
+.gitignore
+*.log
+.DS_Store
+.env
+.env.*
+!.env.example

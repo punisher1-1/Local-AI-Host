@@ -1,0 +1,65 @@
+.chat-input-form {
+  max-width: 800px;
+  margin: 0 auto;
+  display: flex;
+  align-items: flex-end;
+  gap: 0.5rem;
+  padding: 0.75rem;
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+}
+
+.text-input {
+  flex: 1;
+  background: transparent;
+  border: none;
+  color: var(--text-primary);
+  font-size: 1rem;
+  resize: none;
+  min-height: 24px;
+  max-height: 200px;
+  padding: 0.25rem 0;
+  line-height: 1.5;
+}
+
+.text-input::placeholder {
+  color: var(--text-secondary);
+}
+
+.action-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: var(--radius-md);
+  color: var(--text-secondary);
+  flex-shrink: 0;
+}
+
+.action-btn:hover {
+  background-color: var(--bg-tertiary);
+  color: var(--text-primary);
+}
+
+.send-btn.active {
+  background-color: var(--accent-color);
+  color: white;
+}
+
+.send-btn.active:hover {
+  background-color: var(--accent-hover);
+}
+
+/* --- Stop button (shown while streaming) --- */
+.stop-btn.active {
+  background-color: var(--accent-color);
+  color: #fff;
+}
+.stop-btn.active:hover {
+  background-color: var(--accent-hover);
+}
+.text-input:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}

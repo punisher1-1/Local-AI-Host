@@ -1,0 +1,22 @@
+# One service: the app container. The database lives OUTSIDE this compose file
+# on purpose (separate lifecycle, its own backups/redundancy).
+#
+#   docker compose up -d --build
+#
+services:
+  ai-app:
+    build: .
+    image: lja-localai:latest
+    container_name: lja-localai
+    ports:
+      - "8080:80"          # browse to http://<lxc-ip>:8080
+    env_file:
+      - .env               # DB + vLLM + Ollama settings (copy from .env.example)
+    restart: unless-stopped
+    # Required when running Docker INSIDE a Proxmox LXC. Your KB "Docker in LXC
+    # AppArmor and Deployment Troubleshooting" documents the exit-243 failure
+    # where the LXC can't load the docker-default AppArmor profile; running the
+    # container unconfined is the verified workaround (still namespace/cgroup
+    # isolated by the LXC). Harmless if you ever run this on a full VM instead.
+    security_opt:
+      - apparmor=unconfined

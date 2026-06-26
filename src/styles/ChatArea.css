@@ -1,0 +1,80 @@
+.chat-area {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  background-color: var(--bg-primary);
+  height: 100vh;
+}
+
+.chat-header {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  padding: 1rem 1.5rem;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-bottom: 1px solid var(--border-color);
+  background: var(--bg-glass);
+}
+
+.chat-title {
+  font-size: 1rem;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.messages-container {
+  flex: 1;
+  overflow-y: auto;
+  padding: 5rem 0 2rem; /* Make room for header */
+}
+
+.messages-list {
+  max-width: 800px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+  padding: 0 1.5rem;
+}
+
+.input-container {
+  padding: 1rem 1.5rem 2rem;
+  background: linear-gradient(to top, var(--bg-primary) 80%, transparent);
+}
+
+/* --- Backend wiring additions --- */
+.chat-header {
+  justify-content: space-between !important;
+  gap: 1rem;
+}
+.chat-endpoint {
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 50%;
+}
+.empty-state {
+  margin: auto;
+  text-align: center;
+  color: var(--text-secondary);
+  font-size: 0.95rem;
+  padding: 3rem 1rem;
+}
+.chat-error {
+  align-self: center;
+  background: rgba(255, 107, 107, 0.12);
+  border: 1px solid rgba(255, 107, 107, 0.35);
+  color: #ff9b9b;
+  padding: 0.6rem 1rem;
+  border-radius: var(--radius-md);
+  font-size: 0.85rem;
+  max-width: 100%;
+}
