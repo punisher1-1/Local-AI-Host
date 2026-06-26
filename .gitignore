@@ -31,3 +31,7 @@ dist-electron-release
 .env
 .env.*
 !.env.example
+
+# Ingestion source documents (not code; can be large)
+data/pdfs/
+!data/pdfs/.gitkeep

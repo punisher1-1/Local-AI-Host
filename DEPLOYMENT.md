@@ -119,6 +119,41 @@ cd ai-frontend && git pull         # or re-copy the folder
 docker compose up -d --build       # rebuilds the image, recreates the container
 ```
 
+## Ingesting documents (populating the vector store)
+
+`server/ingest.py` loads PDF/TXT/MD files into pgvector so the app has something
+to retrieve. It embeds with the **same** model the query side uses (bge-m3) and
+writes to the table named by `RAG_TABLE` — so set `DATABASE_URL` + `RAG_TABLE` in
+`.env` to the database/table you want *before* ingesting.
+
+One-time DB prep (run against your Postgres, e.g. via psql/pgAdmin):
+
+```sql
+CREATE DATABASE lja_rag;          -- a fresh DB for this app (recommended)
+-- pgvector must be available on the server; ingest.py runs CREATE EXTENSION itself.
+```
+
+Then point `.env` at it (`DATABASE_URL=postgresql://user:pw@host:5432/lja_rag`,
+`RAG_TABLE=data_lja_rag`), rebuild so `pypdf` is in the image, drop documents in
+`./data/pdfs`, and run:
+
+```bash
+docker compose up -d --build                         # picks up pypdf
+docker compose exec ai-app python /app/ingest.py --source /data/pdfs
+# re-tuning chunking later? wipe + reload:
+docker compose exec ai-app python /app/ingest.py --source /data/pdfs --reset
+```
+
+`ingest.py` auto-creates the table + HNSW index on first run. Confirm it worked:
+
+```bash
+curl "http://localhost:8080/search?q=<a question about your docs>&k=3"
+```
+
+> Source files are the source of truth; the table is rebuildable. Changing the
+> parser or chunk size is just an edit to `ingest.py` + a `--reset` re-run — the
+> embedder is the only thing you can't change without a full re-index.
+
 ## Notes / follow-ups
 
 - **Streaming:** `serve.py` currently sends the full answer as one SSE chunk

@@ -12,6 +12,10 @@ services:
       - "8080:80"          # browse to http://<lxc-ip>:8080
     env_file:
       - .env               # DB + vLLM + Ollama settings (copy from .env.example)
+    volumes:
+      # Drop documents to ingest here; ingest.py reads them at /data/pdfs.
+      # Read-only — the app never writes to your source files.
+      - ./data/pdfs:/data/pdfs:ro
     restart: unless-stopped
     # Required when running Docker INSIDE a Proxmox LXC. Your KB "Docker in LXC
     # AppArmor and Deployment Troubleshooting" documents the exit-243 failure
