@@ -32,8 +32,22 @@ import json
 import argparse
 import pathlib
 
+import re
+
 import psycopg
 from pypdf import PdfReader
+
+# Some parsers (e.g. Docling's VLM pipeline) embed page images into their markdown
+# as base64 data URIs. Those are useless for retrieval and would otherwise be
+# chunked + embedded into garbage vectors, so strip them before anything else.
+_DATA_URI_RE = re.compile(
+    r'!\[[^\]]*\]\(\s*data:[^)]*\)|data:[a-z]+/[^;\s]+;base64,[A-Za-z0-9+/=]{40,}',
+    re.IGNORECASE,
+)
+
+
+def _strip_embedded_data(text: str) -> str:
+    return _DATA_URI_RE.sub("", text)
 
 import makerspace_rag as core  # one source of truth: embed(), EMBED_MODEL, OLLAMA_URL, DATABASE_URL, RAG_TABLE
 
@@ -91,7 +105,8 @@ def load_document(path: pathlib.Path):
 # context, or kill CHUNK_OVERLAP and watch facts split across a boundary vanish.
 # ════════════════════════════════════════════════════════════════════════════
 def chunk_text(text: str, size: int = CHUNK_SIZE, overlap: int = CHUNK_OVERLAP):
-    text = " ".join(text.split())  # normalize whitespace/newlines
+    text = _strip_embedded_data(text)  # drop base64 image blobs some parsers embed
+    text = " ".join(text.split())      # normalize whitespace/newlines
     if not text:
         return []
     if len(text) <= size:
@@ -113,6 +128,46 @@ def chunk_text(text: str, size: int = CHUNK_SIZE, overlap: int = CHUNK_OVERLAP):
 
 
 # ════════════════════════════════════════════════════════════════════════════
+# CHUNK (structured) — split markdown on its headings so each chunk IS a section
+# and carries that heading as metadata. This is the high-value move for vague
+# queries over regulations: "termination pay?" lands on a self-labeled
+# "Sec. 61.014. PAYMENT OF WAGES" chunk instead of a context-free window. Long
+# sections are window-split, but every piece keeps its section label.
+# ════════════════════════════════════════════════════════════════════════════
+_HEADING_RE = re.compile(r'^\s{0,3}#{1,6}\s+(.*\S)\s*$')
+
+
+def chunk_markdown_by_heading(text, size=CHUNK_SIZE, overlap=CHUNK_OVERLAP):
+    """Return a list of (section, chunk_text). Splits on markdown headings; the
+    heading is both prepended into the chunk body (so the chunk is self-describing
+    for the embedder) and returned separately (so it can go into metadata_)."""
+    text = _strip_embedded_data(text)
+    sections, heading, buf = [], None, []
+    for line in text.splitlines():
+        m = _HEADING_RE.match(line)
+        if m:
+            if heading is not None or buf:
+                sections.append((heading, "\n".join(buf).strip()))
+            heading, buf = m.group(1).strip(), []
+        else:
+            buf.append(line)
+    if heading is not None or buf:
+        sections.append((heading, "\n".join(buf).strip()))
+
+    out = []
+    for sec, body in sections:
+        full = f"{sec}\n{body}".strip() if sec else body
+        if not full:
+            continue
+        if len(" ".join(full.split())) <= size:
+            out.append((sec, full))
+        else:
+            for piece in chunk_text(full, size, overlap):
+                out.append((sec, piece))
+    return out
+
+
+# ════════════════════════════════════════════════════════════════════════════
 # WRITE — embed each chunk and insert it with citable metadata.
 # metadata_.name is what serve.py's /search and the UI's "Sources" panel display.
 # ════════════════════════════════════════════════════════════════════════════
@@ -129,21 +184,28 @@ def delete_by_name(conn, name: str):
     conn.commit()
 
 
-def ingest_file(conn, path: pathlib.Path, replace: bool = False) -> int:
+def ingest_file(conn, path: pathlib.Path, replace: bool = False, structured: bool = False) -> int:
     # replace=True makes re-ingesting the same filename idempotent (drop its old
     # chunks first) instead of appending duplicates — used by the upload endpoint.
     if replace:
         delete_by_name(conn, path.name)
+    # structured=True splits markdown/text on headings and tags each chunk with
+    # its section. (PDFs have no markdown headings, so they fall back to windows.)
+    use_headings = structured and path.suffix.lower() in {".md", ".txt"}
     n = 0
     for text, page in load_document(path):
-        for ci, chunk in enumerate(chunk_text(text)):
+        if use_headings:
+            units = chunk_markdown_by_heading(text)            # [(section, chunk)]
+        else:
+            units = [(None, c) for c in chunk_text(text)]
+        for ci, (section, chunk) in enumerate(units):
             vec = core.embed(chunk)
             if len(vec) != EMBED_DIM:
                 raise RuntimeError(
                     f"Embedding dimension {len(vec)} != expected {EMBED_DIM}. "
                     f"Is EMBED_MODEL '{core.EMBED_MODEL}' the bge-m3 model this table is for?"
                 )
-            meta = {"name": path.name, "page": page, "chunk": ci}
+            meta = {"name": path.name, "page": page, "section": section, "chunk": ci}
             with conn.cursor() as cur:
                 cur.execute(
                     f"INSERT INTO {core.RAG_TABLE} (text, metadata_, embedding) "
@@ -155,7 +217,7 @@ def ingest_file(conn, path: pathlib.Path, replace: bool = False) -> int:
     return n
 
 
-def ingest_paths(paths, reset: bool = False, replace: bool = False) -> int:
+def ingest_paths(paths, reset: bool = False, replace: bool = False, structured: bool = False) -> int:
     """Programmatic entry point (used by serve.py's /ingest endpoint). Opens a
     connection, ensures the schema, optionally resets, and ingests each path."""
     total = 0
@@ -166,7 +228,7 @@ def ingest_paths(paths, reset: bool = False, replace: bool = False) -> int:
                 cur.execute(f"TRUNCATE {core.RAG_TABLE} RESTART IDENTITY;")
             conn.commit()
         for p in paths:
-            total += ingest_file(conn, p, replace=replace)
+            total += ingest_file(conn, p, replace=replace, structured=structured)
     return total
 
 
@@ -179,6 +241,9 @@ def main():
     ap.add_argument("--preview", action="store_true",
                     help="Parse + chunk and PRINT the chunks only — no embedding, no DB writes. "
                          "Tune with CHUNK_SIZE / CHUNK_OVERLAP env vars and re-run.")
+    ap.add_argument("--structured", action="store_true",
+                    help="Split markdown/text on headings; tag each chunk with its section "
+                         "(metadata_.section). Best for structured docs and regulations.")
     args = ap.parse_args()
 
     src = pathlib.Path(args.source)
@@ -194,12 +259,16 @@ def main():
         for f in files:
             print(f"\n===== {f.name} =====")
             n = 0
+            use_headings = args.structured and f.suffix.lower() in {".md", ".txt"}
             for text, page in load_document(f):
-                for chunk in chunk_text(text):
-                    print(f"\n--- chunk {n}  (page {page}, {len(chunk)} chars) ---")
+                units = chunk_markdown_by_heading(text) if use_headings else [(None, c) for c in chunk_text(text)]
+                for section, chunk in units:
+                    tag = f"section: {section}" if section else f"page {page}"
+                    print(f"\n--- chunk {n}  ({tag}, {len(chunk)} chars) ---")
                     print(chunk)
                     n += 1
-            print(f"\n[{f.name}: {n} chunks  @ size={CHUNK_SIZE} / overlap={CHUNK_OVERLAP}]")
+            mode = " · structured" if use_headings else ""
+            print(f"\n[{f.name}: {n} chunks  @ size={CHUNK_SIZE} / overlap={CHUNK_OVERLAP}{mode}]")
         return
 
     print(f"Embedder : {core.EMBED_MODEL} @ {core.OLLAMA_URL}")
@@ -219,7 +288,7 @@ def main():
         total = 0
         for f in files:
             try:
-                c = ingest_file(conn, f)
+                c = ingest_file(conn, f, structured=args.structured)
                 total += c
                 print(f"  OK  {f.name}: {c} chunks")
             except SystemExit:

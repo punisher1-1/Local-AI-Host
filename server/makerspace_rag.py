@@ -56,9 +56,10 @@ _raw_db = os.environ.get("DATABASE_URL", "postgresql://makerspace:makerspace@10.
 DATABASE_URL = _raw_db.replace("postgresql+psycopg", "postgresql").replace("postgresql+asyncpg", "postgresql")
 
 SYSTEM_PROMPT = (
-    "You answer questions about the MakerSpace using ONLY the provided context. "
+    "You answer questions using ONLY the provided context. "
+    "Each context block is prefixed with its source in [brackets]. "
     "If the context does not contain the answer, say you don't have that information. "
-    "Be concise and mention the item names you used."
+    "Be concise, and cite the source document (and section or page when shown) you used."
 )
 
 
@@ -107,7 +108,21 @@ def retrieve(query_vec: list[float], k: int = TOP_K) -> list[dict]:
 # and watch grounding disappear — proof the answer comes from retrieval, not the LLM.
 # ════════════════════════════════════════════════════════════════════════════
 def build_prompt(question: str, hits: list[dict]) -> str:
-    context = "\n\n---\n\n".join(h["text"] for h in hits)
+    # Prefix each chunk with its source metadata so the MODEL (not just the user)
+    # knows where the text came from — enabling inline citations and answers like
+    # "which document/section is this from?". The metadata is already stored per
+    # chunk in the metadata_ JSONB column, so this is a query-side change only —
+    # no re-embedding required.
+    blocks = []
+    for h in hits:
+        meta = h.get("metadata_") or {}
+        label = f"Source: {meta.get('name', 'unknown')}"
+        if meta.get("section"):
+            label += f", {meta['section']}"
+        elif meta.get("page") is not None:
+            label += f", page {meta['page']}"
+        blocks.append(f"[{label}]\n{h['text']}")
+    context = "\n\n---\n\n".join(blocks)
     return f"Context:\n{context}\n\nQuestion: {question}"
 
 
