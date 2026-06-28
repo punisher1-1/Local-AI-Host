@@ -1,6 +1,26 @@
 import React from 'react';
 import '../styles/MessageBubble.css';
 
+// Collapse the raw per-chunk hits into one entry per document: keep the best
+// score, count the matches, and gather the distinct sections/pages that hit.
+// (Retrieval returns TOP_K chunks, so several can be from the same file.)
+function groupSources(sources) {
+  const map = new Map();
+  for (const s of sources) {
+    const key = s.name || 'unknown';
+    let g = map.get(key);
+    if (!g) {
+      g = { name: key, count: 0, best: 0, locs: [] };
+      map.set(key, g);
+    }
+    g.count += 1;
+    if ((s.score ?? 0) > g.best) g.best = s.score ?? 0;
+    const loc = s.section || (s.page != null ? `p.${s.page}` : null);
+    if (loc && !g.locs.includes(loc)) g.locs.push(loc);
+  }
+  return [...map.values()].sort((a, b) => b.best - a.best);
+}
+
 function MessageBubble({ message }) {
   const isUser = message.role === 'user';
   const sources = message.sources || [];
@@ -29,11 +49,14 @@ function MessageBubble({ message }) {
           <div className="message-sources">
             <span className="sources-label">Sources</span>
             <ul>
-              {sources.map((s, i) => (
-                <li key={i} title={s.text || ''}>
-                  {(s.name || 'chunk')}{' '}
-                  {typeof s.score === 'number' && (
-                    <span className="source-score">({s.score})</span>
+              {groupSources(sources).map((g, i) => (
+                <li key={i}>
+                  <span className="src-name">{g.name}</span>
+                  <span className="source-score">
+                    {' '}{g.best.toFixed(3)}{g.count > 1 ? ` · ${g.count} matches` : ''}
+                  </span>
+                  {g.locs.length > 0 && (
+                    <div className="src-locs">{g.locs.slice(0, 4).join(' · ')}</div>
                   )}
                 </li>
               ))}

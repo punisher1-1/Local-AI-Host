@@ -63,6 +63,8 @@ def search(q: str, k: int = core.TOP_K):
     hits = core.retrieve(core.embed(q), k)
     return [{"score": round(h["score"], 4),
              "name": (h.get("metadata_") or {}).get("name"),
+             "page": (h.get("metadata_") or {}).get("page"),
+             "section": (h.get("metadata_") or {}).get("section"),
              "text": h["text"]} for h in hits]
 
 
@@ -153,7 +155,9 @@ async def chat_completions(request: Request):
                      "finish_reason": "stop"}],
         # Bonus: surface the retrieved sources so you can inspect grounding from the API.
         "x_sources": [{"score": round(h["score"], 4),
-                       "name": (h.get("metadata_") or {}).get("name")} for h in result["sources"]],
+                       "name": (h.get("metadata_") or {}).get("name"),
+                       "page": (h.get("metadata_") or {}).get("page"),
+                       "section": (h.get("metadata_") or {}).get("section")} for h in result["sources"]],
     }
 
 

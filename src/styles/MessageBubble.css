@@ -89,3 +89,15 @@
 .message-sources .source-score {
   opacity: 0.6;
 }
+
+/* --- Sources panel: deduped per-document with section/page locations --- */
+.message-sources .src-name {
+  color: var(--text-secondary);
+}
+.message-sources .src-locs {
+  font-size: 0.72rem;
+  color: var(--text-secondary);
+  opacity: 0.7;
+  margin-top: 0.1rem;
+  padding-left: 0.1rem;
+}
