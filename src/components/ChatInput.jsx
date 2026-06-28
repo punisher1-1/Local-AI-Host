@@ -1,10 +1,18 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import '../styles/ChatInput.css';
 
 // While a reply is streaming, the send button becomes a Stop button and the
 // textarea is disabled so the user can't fire overlapping requests.
-function ChatInput({ onSendMessage, onStop, isStreaming = false }) {
+function ChatInput({ onSendMessage, onStop, onUploadFile, isStreaming = false, isUploading = false }) {
   const [text, setText] = useState('');
+  const fileRef = useRef(null);
+
+  const handleAttachClick = () => fileRef.current?.click();
+  const handleFileChange = (e) => {
+    const f = e.target.files?.[0];
+    if (f) onUploadFile?.(f);
+    e.target.value = ''; // reset so the same file can be re-selected
+  };
 
   const handleSubmit = (e) => {
     e.preventDefault();
@@ -24,10 +32,29 @@ function ChatInput({ onSendMessage, onStop, isStreaming = false }) {
 
   return (
     <form className="chat-input-form glass-panel" onSubmit={handleSubmit}>
-      <button type="button" className="action-btn attach-btn" title="Attach file (coming soon)">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-          <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"></path>
-        </svg>
+      <input
+        ref={fileRef}
+        type="file"
+        accept=".pdf,.txt,.md"
+        style={{ display: 'none' }}
+        onChange={handleFileChange}
+      />
+      <button
+        type="button"
+        className="action-btn attach-btn"
+        title={isUploading ? 'Indexing document…' : 'Upload a document (PDF, TXT, MD)'}
+        onClick={handleAttachClick}
+        disabled={isUploading || isStreaming}
+      >
+        {isUploading ? (
+          <svg className="spin" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+            <path d="M21 12a9 9 0 1 1-6.219-8.56"></path>
+          </svg>
+        ) : (
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"></path>
+          </svg>
+        )}
       </button>
 
       <textarea

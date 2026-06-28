@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import MessageBubble from './MessageBubble';
 import ChatInput from './ChatInput';
-import { streamChat, getSources } from '../api/ragClient';
+import { streamChat, getSources, uploadDocument } from '../api/ragClient';
 import '../styles/ChatArea.css';
 
 // ChatArea owns the live conversation. Messages are passed down from App (so
@@ -11,6 +11,8 @@ function ChatArea({ session, settings, onMessagesChange }) {
   const messages = session.messages;
   const [isStreaming, setIsStreaming] = useState(false);
   const [error, setError] = useState(null);
+  const [isUploading, setIsUploading] = useState(false);
+  const [uploadStatus, setUploadStatus] = useState(null); // { kind: 'info'|'ok'|'err', msg }
   const messagesEndRef = useRef(null);
   const abortRef = useRef(null);
 
@@ -111,6 +113,26 @@ function ChatArea({ session, settings, onMessagesChange }) {
     abortRef.current?.abort();
   }, []);
 
+  const handleUpload = useCallback(
+    async (file) => {
+      setIsUploading(true);
+      setUploadStatus({ kind: 'info', msg: `Uploading & indexing ${file.name}…` });
+      try {
+        const r = await uploadDocument({ baseUrl: settings.baseUrl, file });
+        setUploadStatus({
+          kind: 'ok',
+          msg: `Indexed ${r.filename} — ${r.chunks} chunk${r.chunks === 1 ? '' : 's'} added. You can ask about it now.`,
+        });
+        setTimeout(() => setUploadStatus(null), 7000);
+      } catch (e) {
+        setUploadStatus({ kind: 'err', msg: `Upload failed: ${e.message}` });
+      } finally {
+        setIsUploading(false);
+      }
+    },
+    [settings]
+  );
+
   const visible = messages.filter((m) => m.role !== 'system');
 
   return (
@@ -142,10 +164,15 @@ function ChatArea({ session, settings, onMessagesChange }) {
       </div>
 
       <div className="input-container">
+        {uploadStatus && (
+          <div className={`upload-status ${uploadStatus.kind}`}>{uploadStatus.msg}</div>
+        )}
         <ChatInput
           onSendMessage={handleSendMessage}
           onStop={handleStop}
+          onUploadFile={handleUpload}
           isStreaming={isStreaming}
+          isUploading={isUploading}
         />
       </div>
     </main>

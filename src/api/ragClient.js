@@ -123,6 +123,29 @@ export async function getSources(baseUrl, query, k = 4) {
   }
 }
 
+/**
+ * Upload a document to the backend, which ingests it into pgvector. Maps to
+ * serve.py's POST /ingest (multipart form). Returns { filename, chunks }.
+ */
+export async function uploadDocument({ baseUrl, file }) {
+  const base = normalizeBaseUrl(baseUrl);
+  const form = new FormData();
+  form.append('file', file);
+
+  const res = await fetch(`${base}/ingest`, { method: 'POST', body: form });
+  if (!res.ok) {
+    let msg = `HTTP ${res.status}`;
+    try {
+      const j = await res.json();
+      if (j?.error) msg = j.error;
+    } catch {
+      // non-JSON error body; keep the status code
+    }
+    throw new Error(msg);
+  }
+  return res.json(); // { filename, chunks }
+}
+
 // ── helpers ──────────────────────────────────────────────────────────────────
 
 function friendlyError(err) {

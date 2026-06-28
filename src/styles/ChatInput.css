@@ -63,3 +63,15 @@
   opacity: 0.6;
   cursor: not-allowed;
 }
+
+/* --- Attach/upload spinner --- */
+.attach-btn:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+.action-btn .spin {
+  animation: attach-spin 0.9s linear infinite;
+}
+@keyframes attach-spin {
+  to { transform: rotate(360deg); }
+}

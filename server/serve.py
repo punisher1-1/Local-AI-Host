@@ -19,12 +19,16 @@ import os
 import time
 import json
 import uuid
+import tempfile
+import pathlib
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, UploadFile, File
+from fastapi.concurrency import run_in_threadpool
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse
+from fastapi.responses import StreamingResponse, JSONResponse
 
 import makerspace_rag as core   # reuse the SAME four-layer functions — one source of truth
+import ingest                   # reuse the SAME index-side functions for uploads
 
 MODEL_ID = os.environ.get("RAG_MODEL_ID", "makerspace-rag")
 PORT = int(os.environ.get("PORT", "8088"))
@@ -60,6 +64,32 @@ def search(q: str, k: int = core.TOP_K):
     return [{"score": round(h["score"], 4),
              "name": (h.get("metadata_") or {}).get("name"),
              "text": h["text"]} for h in hits]
+
+
+# ── Document upload → ingest into pgvector (the UI's attach button) ───────────
+# Accepts one file, runs it through the SAME ingest.py core the CLI uses, and
+# returns how many chunks were added. replace=True so re-uploading a file with
+# the same name refreshes its chunks instead of duplicating them.
+@app.post("/ingest")
+async def ingest_upload(file: UploadFile = File(...)):
+    name = file.filename or "upload"
+    suffix = pathlib.Path(name).suffix.lower()
+    if suffix not in ingest.SUPPORTED:
+        return JSONResponse(
+            status_code=400,
+            content={"error": f"Unsupported file type '{suffix}'. Allowed: .pdf, .txt, .md"},
+        )
+    data = await file.read()
+    with tempfile.TemporaryDirectory() as td:
+        p = pathlib.Path(td) / name          # keep the real name so metadata_.name is the source file
+        p.write_bytes(data)
+        try:
+            # Embedding is blocking (sync httpx + psycopg); run it off the event
+            # loop so chat/health stay responsive while a big PDF indexes.
+            chunks = await run_in_threadpool(ingest.ingest_paths, [p], replace=True)
+        except Exception as e:               # DB/embed/parse failure → 500 with the reason
+            return JSONResponse(status_code=500, content={"error": str(e)})
+    return {"filename": name, "chunks": chunks}
 
 
 # ── OpenAI-compatible: model list (so Open WebUI shows us in its dropdown) ─────

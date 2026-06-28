@@ -120,13 +120,26 @@ def _vector_literal(vec):
     return "[" + ",".join(repr(float(x)) for x in vec) + "]"
 
 
-def ingest_file(conn, path: pathlib.Path) -> int:
+def delete_by_name(conn, name: str):
+    """Remove all chunks previously ingested from a file of this name."""
+    with conn.cursor() as cur:
+        cur.execute(
+            f"DELETE FROM {core.RAG_TABLE} WHERE metadata_->>'name' = %s", (name,)
+        )
+    conn.commit()
+
+
+def ingest_file(conn, path: pathlib.Path, replace: bool = False) -> int:
+    # replace=True makes re-ingesting the same filename idempotent (drop its old
+    # chunks first) instead of appending duplicates — used by the upload endpoint.
+    if replace:
+        delete_by_name(conn, path.name)
     n = 0
     for text, page in load_document(path):
         for ci, chunk in enumerate(chunk_text(text)):
             vec = core.embed(chunk)
             if len(vec) != EMBED_DIM:
-                raise SystemExit(
+                raise RuntimeError(
                     f"Embedding dimension {len(vec)} != expected {EMBED_DIM}. "
                     f"Is EMBED_MODEL '{core.EMBED_MODEL}' the bge-m3 model this table is for?"
                 )
@@ -140,6 +153,21 @@ def ingest_file(conn, path: pathlib.Path) -> int:
             n += 1
     conn.commit()
     return n
+
+
+def ingest_paths(paths, reset: bool = False, replace: bool = False) -> int:
+    """Programmatic entry point (used by serve.py's /ingest endpoint). Opens a
+    connection, ensures the schema, optionally resets, and ingests each path."""
+    total = 0
+    with psycopg.connect(core.DATABASE_URL, connect_timeout=10) as conn:
+        ensure_schema(conn)
+        if reset:
+            with conn.cursor() as cur:
+                cur.execute(f"TRUNCATE {core.RAG_TABLE} RESTART IDENTITY;")
+            conn.commit()
+        for p in paths:
+            total += ingest_file(conn, p, replace=replace)
+    return total
 
 
 def main():
