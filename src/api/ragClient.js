@@ -146,6 +146,28 @@ export async function uploadDocument({ baseUrl, file }) {
   return res.json(); // { filename, chunks }
 }
 
+/**
+ * List ingested documents with their chunk counts (serve.py GET /documents).
+ */
+export async function listDocuments(baseUrl) {
+  const base = normalizeBaseUrl(baseUrl);
+  const res = await fetch(`${base}/documents`);
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json(); // [{ name, chunks }]
+}
+
+/**
+ * Read back the stored chunks (text + page/chunk metadata) for one document
+ * (serve.py GET /chunks?name=...). This is the "see what the parser produced"
+ * view — readable text, not vectors.
+ */
+export async function getChunks(baseUrl, name) {
+  const base = normalizeBaseUrl(baseUrl);
+  const res = await fetch(`${base}/chunks?name=${encodeURIComponent(name)}`);
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json(); // [{ page, chunk, text }]
+}
+
 // ── helpers ──────────────────────────────────────────────────────────────────
 
 function friendlyError(err) {

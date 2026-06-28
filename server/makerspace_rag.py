@@ -144,6 +144,38 @@ def generate(question: str, hits: list[dict]) -> str:
     return resp.json()["choices"][0]["message"]["content"]
 
 
+# ── Inspection: list ingested documents + read back their stored chunks ───────
+# Powers the in-app "Documents" viewer so you can see what the parser produced
+# (the readable text), not just the vectors, without dropping to psql.
+def list_documents() -> list[dict]:
+    sql = f"""
+        SELECT metadata_->>'name' AS name, COUNT(*) AS chunks
+        FROM {RAG_TABLE}
+        GROUP BY 1
+        ORDER BY 1
+    """
+    with psycopg.connect(DATABASE_URL, connect_timeout=10) as conn:
+        with conn.cursor() as cur:
+            cur.execute(sql)
+            return [{"name": r[0], "chunks": r[1]} for r in cur.fetchall()]
+
+
+def get_chunks(name: str) -> list[dict]:
+    # ORDER BY id == insertion order == parse order (page, then chunk index).
+    sql = f"""
+        SELECT metadata_->>'page' AS page,
+               metadata_->>'chunk' AS chunk,
+               text
+        FROM {RAG_TABLE}
+        WHERE metadata_->>'name' = %s
+        ORDER BY id
+    """
+    with psycopg.connect(DATABASE_URL, connect_timeout=10) as conn:
+        with conn.cursor() as cur:
+            cur.execute(sql, (name,))
+            return [{"page": r[0], "chunk": r[1], "text": r[2]} for r in cur.fetchall()]
+
+
 # ── Orchestration: the whole pipeline in one call ─────────────────────────────
 def answer(question: str, k: int = TOP_K) -> dict:
     """Run all four layers and return the answer + the sources used."""

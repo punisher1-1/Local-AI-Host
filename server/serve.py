@@ -92,6 +92,23 @@ async def ingest_upload(file: UploadFile = File(...)):
     return {"filename": name, "chunks": chunks}
 
 
+# ── Documents viewer — list ingested docs and read back their chunks ──────────
+@app.get("/documents")
+def documents():
+    try:
+        return core.list_documents()
+    except Exception:
+        return []   # table not created yet (nothing ingested) → no documents
+
+
+@app.get("/chunks")
+def chunks(name: str):
+    try:
+        return core.get_chunks(name)
+    except Exception as e:
+        return JSONResponse(status_code=500, content={"error": str(e)})
+
+
 # ── OpenAI-compatible: model list (so Open WebUI shows us in its dropdown) ─────
 @app.get("/v1/models")
 def list_models():

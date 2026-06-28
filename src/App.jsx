@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import Sidebar from './components/Sidebar';
 import ChatArea from './components/ChatArea';
 import SettingsModal from './components/SettingsModal';
+import DocumentsModal from './components/DocumentsModal';
 import { loadSettings, saveSettings } from './config';
 import logo from './assets/logo.png';
 import './App.css';
@@ -30,6 +31,7 @@ function loadSessions() {
 
 function App() {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [isDocsOpen, setIsDocsOpen] = useState(false);
   const [settings, setSettings] = useState(loadSettings);
   const [sessions, setSessions] = useState(loadSessions);
   const [currentChatId, setCurrentChatId] = useState(() => loadSessions()[0].id);
@@ -86,6 +88,7 @@ function App() {
           onSelectChat={setCurrentChatId}
           onNewChat={handleNewChat}
           onOpenSettings={() => setIsSettingsOpen(true)}
+          onOpenDocuments={() => setIsDocsOpen(true)}
         />
         <ChatArea
           key={currentSession.id}
@@ -103,6 +106,10 @@ function App() {
           onSave={handleSaveSettings}
           onClose={() => setIsSettingsOpen(false)}
         />
+      )}
+
+      {isDocsOpen && (
+        <DocumentsModal settings={settings} onClose={() => setIsDocsOpen(false)} />
       )}
     </div>
   );

@@ -176,6 +176,9 @@ def main():
                     help="Folder of .pdf/.txt/.md files (default: /data/pdfs)")
     ap.add_argument("--reset", action="store_true",
                     help="TRUNCATE the table before ingesting (clean re-index)")
+    ap.add_argument("--preview", action="store_true",
+                    help="Parse + chunk and PRINT the chunks only — no embedding, no DB writes. "
+                         "Tune with CHUNK_SIZE / CHUNK_OVERLAP env vars and re-run.")
     args = ap.parse_args()
 
     src = pathlib.Path(args.source)
@@ -185,6 +188,19 @@ def main():
     files = sorted(p for p in src.rglob("*") if p.suffix.lower() in SUPPORTED)
     if not files:
         raise SystemExit(f"No .pdf/.txt/.md files found under {src}")
+
+    # ── DRY RUN: see exactly how a document parses + chunks, no DB, no embedder.
+    if args.preview:
+        for f in files:
+            print(f"\n===== {f.name} =====")
+            n = 0
+            for text, page in load_document(f):
+                for chunk in chunk_text(text):
+                    print(f"\n--- chunk {n}  (page {page}, {len(chunk)} chars) ---")
+                    print(chunk)
+                    n += 1
+            print(f"\n[{f.name}: {n} chunks  @ size={CHUNK_SIZE} / overlap={CHUNK_OVERLAP}]")
+        return
 
     print(f"Embedder : {core.EMBED_MODEL} @ {core.OLLAMA_URL}")
     print(f"Table    : {core.RAG_TABLE}")
